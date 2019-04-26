@@ -41,7 +41,7 @@ parser.add_argument('--save_frequency', type=int, default=1000,
 parser.add_argument('--checkpoint_dir', type=str, default='./ckpt/',
                     help='Directory to save models')
 # Params to save and load datasets
-parser.add_argument('--data_dir', type=str, default='./data/',
+parser.add_argument('--data_dir', type=str, default='./data/coco/',
                     help='Deirectory to save datasets')
 parser.add_argument('--num_workers', type=int, default=2,
                     help='Number of workers to load data (default: 2)')
@@ -50,6 +50,12 @@ parser.add_argument('--data_name', type=str, default='COCO',
                     help='Dataset to load and perform training/inference')
 parser.add_argument('--model_name', type=str, default='STYLE',
                     help='Dataset to load and perform training/inference')
+parser.add_argument("--style_image", type=str, default="./data/styles/mosaic.jpg",
+                    help="path to style-image")
+parser.add_argument("--image_size", type=int, default=256,
+                    help="size of training images, default is 256 X 256")
+parser.add_argument("--style_size", type=int, default=None,
+                    help="size of style_image, default is the original size of style image")
 
 
 def main(args):

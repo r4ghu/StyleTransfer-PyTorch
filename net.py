@@ -3,10 +3,12 @@ import glob
 
 from loaders import *
 
+import numpy as np
 import torch
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 
+import utils
 
 class Net(object):
     def __init__(self, args):
@@ -14,6 +16,7 @@ class Net(object):
         self.args = args
 
         # Setup manual seed
+        np.random.seed(args.seed)
         torch.manual_seed(args.seed)
 
         # Set the device
@@ -35,6 +38,11 @@ class Net(object):
         self._build_optimizer()
         print('DONE')
 
+        # Setup Loss
+        print('Build loss...', end='')
+        self._build_loss()
+        print('DONE')
+
         # Setup summary writer
         self.writer = SummaryWriter('runs/{}'.format(self.args.data_name))
 
@@ -43,6 +51,7 @@ class Net(object):
         # Load the model
         _model_loader = ModelLoader(self.args)
         self.model = _model_loader.model
+        self.vgg = _model_loader.vgg
 
         # If continue_train, load the pre-trained model
         if self.args.phase == 'train':
@@ -52,35 +61,62 @@ class Net(object):
         # If multiple GPUs are available, automatically include DataParallel
         if self.args.multi_gpu and torch.cuda.device_count() > 1:
             self.model = nn.DataParallel(self.model)
+            self.vgg = nn.DataParallel(self.vgg)
         self.model.to(self.device)
+        self.vgg.to(self.device)
 
     def _build_data_loader(self):
         _data_loader = DataLoader(self.args)
         self.train_loader = _data_loader.train_loader
-        self.test_loader = _data_loader.test_loader
 
     def _build_optimizer(self):
-        self.optimizer = optim.SGD(self.model.parameters(), lr=self.args.lr, momentum=self.args.momentum)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=self.args.lr)
+    
+    def _build_loss(self):
+        self.loss = nn.MSELoss()
 
     def _train_epoch(self, epoch):
+        print('Start Epoch')
         self.model.train()
 
         # Start Training
-        for batch_idx, (data, target) in enumerate(self.train_loader):
+        for batch_idx, (data, _) in enumerate(self.train_loader):
+            print('Enter iteration')
+            n_batch = len(data)
             self.args.iter_count += 1
-            data, target = data.to(self.device), target.to(self.device)
             self.optimizer.zero_grad()
-            output = self.model(data)
-            loss = F.nll_loss(output, target)
-            loss.backward()
+
+            data = data.to(self.device)
+            target = self.model(data)
+
+            target = utils.normalize_batch(target)
+            data = utils.normalize_batch(data)
+
+            features_target = self.vgg(target)
+            features_data = self.vgg(data)
+
+            content_loss = self.args.content_weight * self.loss(features_target.relu2_2, features_data.relu2_2)
+            
+            style_loss = 0.
+            for ft_y, gm_s in zip(features_target, self.gram_style):
+                gm_y = utils.gram_matrix(ft_y)
+                style_loss += self.loss(gm_y, gm_s[:n_batch, :, :])
+            style_loss *= self.args.style_weight
+
+            total_loss = content_loss + style_loss
+            total_loss.backward()
             self.optimizer.step()
+
+            agg_content_loss += content_loss.item()
+            agg_style_loss += style_loss.item()
 
             if batch_idx % self.args.log_interval == 0:
                 # Add the values to Summary Writer
-                self.writer.add_scalar('train/loss', loss.item(), self.args.iter_count)
-                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                # self.writer.add_scalar('train/loss', loss.item(), self.args.iter_count)
+                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss (Content, Style, Total): {:.6f}, {:.6f}, {:.6f}'.format(
                     epoch, batch_idx * len(data), len(self.train_loader.dataset),
-                    100. * batch_idx / len(self.train_loader), loss.item()))
+                    100. * batch_idx / len(self.train_loader), agg_content_loss / batch_idx, 
+                    agg_style_loss / batch_idx, (agg_content_loss + agg_style_loss) / batch_idx))
             if self.args.iter_count % self.args.save_frequency == 0:
                 self.save_model()
     
@@ -105,6 +141,18 @@ class Net(object):
             100. * correct / len(self.test_loader.dataset)))
     
     def train(self):
+        print('Start Training')
+        style_transform = transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Lambda(lambda x: x.mul(255))
+        ])
+        style = utils.load_image(self.args.style_image, size=self.args.style_size)
+        style = style_transform(style)
+        style = style.repeat(self.args.train_batch_size, 1, 1, 1).to(self.device)
+
+        features_style = self.vgg(utils.normalize_batch(style))
+        self.gram_style = [utils.gram_matrix(y) for y in features_style]
+        print('Done')
         for epoch in range(1, self.args.epochs + 1):
             self._train_epoch(epoch)
             self.test()

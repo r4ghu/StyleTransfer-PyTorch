@@ -92,9 +92,9 @@ class DataLoader:
 
         trainset = datasets.ImageFolder(args.data_dir, transform)
 
-        self.train_loader = DataLoader(trainset,
-                                       batch_size=args.train_batch_size,
-                                       shuffle=True, **self.kwargs_gpu)
+        self.train_loader = torch.utils.data.DataLoader(trainset,
+                                                        batch_size=args.train_batch_size,
+                                                        shuffle=True, **self.kwargs_gpu)
     
     # def loadStyles(self, args):
     #     transform = transforms.Compose([

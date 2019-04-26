@@ -13,8 +13,8 @@ from torchvision import transforms
 import torch.onnx
 
 import utils
-from transformer_net import TransformerNet
-from vgg import Vgg16
+from models.transformer_net import TransformerNet
+from models.vgg import Vgg16
 
 
 def check_paths(args):
@@ -78,7 +78,7 @@ def train(args):
             features_y = vgg(y)
             features_x = vgg(x)
 
-            content_loss = args.content_weight * mse_loss(features_y.relu2_2, features_x.relu2_2)
+            content_loss = args.content_weight * mse_loss(features_y.relu_2_2, features_x.relu_2_2)
 
             style_loss = 0.
             for ft_y, gm_s in zip(features_y, gram_style):
@@ -181,7 +181,7 @@ def main():
     train_arg_parser.add_argument("--dataset", type=str, required=True,
                                   help="path to training dataset, the path should point to a folder "
                                        "containing another folder with all the training images")
-    train_arg_parser.add_argument("--style-image", type=str, default="images/style-images/mosaic.jpg",
+    train_arg_parser.add_argument("--style-image", type=str, default="./data/styles/mosaic.jpg",
                                   help="path to style-image")
     train_arg_parser.add_argument("--save-model-dir", type=str, required=True,
                                   help="path to folder where trained model will be saved.")
