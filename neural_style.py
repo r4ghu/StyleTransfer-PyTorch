@@ -15,6 +15,7 @@ import torch.onnx
 import utils
 from models.transformer_net import TransformerNet
 from models.vgg import Vgg16
+from net2 import Net
 
 
 def check_paths(args):
@@ -222,6 +223,8 @@ def main():
 
     args = main_arg_parser.parse_args()
 
+    net = Net(args)
+
     if args.subcommand is None:
         print("ERROR: specify either train or eval")
         sys.exit(1)
@@ -231,7 +234,7 @@ def main():
 
     if args.subcommand == "train":
         check_paths(args)
-        train(args)
+        net.train()
     else:
         stylize(args)
 

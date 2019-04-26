@@ -106,3 +106,4 @@ venv.bak/
 # Project related
 data
 runs
+ckpt
