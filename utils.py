@@ -1,3 +1,4 @@
+# Source: https://github.com/pytorch/examples/blob/master/fast_neural_style/neural_style/utils.py
 import torch
 from PIL import Image
 
