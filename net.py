@@ -1,3 +1,37 @@
+# net.py - StyleTransfer-PyTorch
+# 
+# BSD 3-Clause License
+# 
+# Copyright (c) 2019, Sri Raghu Malireddi
+# All rights reserved.
+# 
+# Redistribution and use in source and binary forms, with or without
+# modification, are permitted provided that the following conditions are met:
+# 
+# 1. Redistributions of source code must retain the above copyright notice, this
+# 	list of conditions and the following disclaimer.
+# 
+# 2. Redistributions in binary form must reproduce the above copyright notice,
+# 	this list of conditions and the following disclaimer in the documentation
+# 	and/or other materials provided with the distribution.
+# 
+# 3. Neither the name of the copyright holder nor the names of its
+# 	contributors may be used to endorse or promote products derived from
+# 	this software without specific prior written permission.
+# 
+# THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
+# AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+# IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+# DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
+# FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+# DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
+# SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+# CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
+# OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+# OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+# Some portions of the code are taken from...
+# Source: https://github.com/pytorch/examples/blob/master/fast_neural_style/neural_style/
 import os
 import glob
 
@@ -8,6 +42,8 @@ import torch
 import torch.optim as optim
 from tensorboardX import SummaryWriter
 
+import cv2
+import time
 import utils
 
 class Net(object):
@@ -22,6 +58,13 @@ class Net(object):
         # Set the device
         # Select GPU:0 by default
         self.device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+        if torch.cuda.is_available():
+            # Sanity check - Empty CUDA Cache
+            torch.cuda.empty_cache()
+            # Enforce CUDNN backend
+            torch.backends.cudnn.benchmark = True
+            torch.backends.cudnn.enabled = True
+
 
         # Load the data
         print('Load the data...', end='')
@@ -51,37 +94,40 @@ class Net(object):
         # Load the model
         _model_loader = ModelLoader(self.args)
         self.model = _model_loader.model
-        self.vgg = _model_loader.vgg
 
-        # If continue_train, load the pre-trained model
         if self.args.phase == 'train':
+            self.vgg = _model_loader.vgg
+            # If continue_train, load the pre-trained model
             if self.args.continue_train:
                 self.load_model()
 
-        # If multiple GPUs are available, automatically include DataParallel
-        if self.args.multi_gpu and torch.cuda.device_count() > 1:
-            self.model = nn.DataParallel(self.model)
-            self.vgg = nn.DataParallel(self.vgg)
+            # If multiple GPUs are available, automatically include DataParallel
+            if self.args.multi_gpu and torch.cuda.device_count() > 1:
+                self.model = nn.DataParallel(self.model)
+                self.vgg = nn.DataParallel(self.vgg)
+            
+            self.vgg.to(self.device)
+        
         self.model.to(self.device)
-        self.vgg.to(self.device)
+        
 
     def _build_data_loader(self):
         _data_loader = DataLoader(self.args)
         self.train_loader = _data_loader.train_loader
 
     def _build_optimizer(self):
-        self.optimizer = optim.Adam(self.model.parameters(), lr=self.args.lr)
+        if self.args.phase == 'train':
+            self.optimizer = optim.Adam(self.model.parameters(), lr=self.args.lr)
     
     def _build_loss(self):
-        self.loss = nn.MSELoss()
+        if self.args.phase == 'train':
+            self.loss = nn.MSELoss()
 
     def _train_epoch(self, epoch):
-        print('Start Epoch')
         self.model.train()
-
+        
         # Start Training
         for batch_idx, (data, _) in enumerate(self.train_loader):
-            print('Enter iteration')
             n_batch = len(data)
             self.args.iter_count += 1
             self.optimizer.zero_grad()
@@ -95,7 +141,7 @@ class Net(object):
             features_target = self.vgg(target)
             features_data = self.vgg(data)
 
-            content_loss = self.args.content_weight * self.loss(features_target.relu2_2, features_data.relu2_2)
+            content_loss = self.args.content_weight * self.loss(features_target.relu_2_2, features_data.relu_2_2)
             
             style_loss = 0.
             for ft_y, gm_s in zip(features_target, self.gram_style):
@@ -107,41 +153,68 @@ class Net(object):
             total_loss.backward()
             self.optimizer.step()
 
-            agg_content_loss += content_loss.item()
-            agg_style_loss += style_loss.item()
-
-            if batch_idx % self.args.log_interval == 0:
+            if batch_idx % self.args.log_interval == 0 and batch_idx>0:
                 # Add the values to Summary Writer
-                # self.writer.add_scalar('train/loss', loss.item(), self.args.iter_count)
+                self.writer.add_scalar('train/style_loss', style_loss.item(), self.args.iter_count)
+                self.writer.add_scalar('train/content_loss', content_loss.item(), self.args.iter_count)
+                self.writer.add_scalar('train/total_loss', total_loss.item(), self.args.iter_count)
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss (Content, Style, Total): {:.6f}, {:.6f}, {:.6f}'.format(
                     epoch, batch_idx * len(data), len(self.train_loader.dataset),
-                    100. * batch_idx / len(self.train_loader), agg_content_loss / batch_idx, 
-                    agg_style_loss / batch_idx, (agg_content_loss + agg_style_loss) / batch_idx))
+                    100. * batch_idx / len(self.train_loader), content_loss.item(), 
+                    style_loss.item(), total_loss.item()))
+            
+            del style_loss, content_loss, total_loss
+            
             if self.args.iter_count % self.args.save_frequency == 0:
                 self.save_model()
     
-    def test(self):
-        self.model.eval()
-        test_loss = 0
-        correct = 0
-        with torch.no_grad():
-            for data, target in self.test_loader:
-                data, target = data.to(self.device), target.to(self.device)
-                output = self.model(data)
-                test_loss += F.nll_loss(output, target, reduction='sum').item() # sum up batch loss
-                pred = output.argmax(dim=1, keepdim=True) # get the index of the max log-probability
-                correct += pred.eq(target.view_as(pred)).sum().item()
 
-        test_loss /= len(self.test_loader.dataset)
+    def test(self, online=True):
+        # TODO: Implement Offline mode
+        if online:
+            # Model is already loaded
+            # Keep it in eval model
+            self.model.eval()
+            
+            # Setup content transform
+            content_transform = transforms.Compose([
+                transforms.ToTensor(),
+                transforms.Lambda(lambda x: x.mul(255))
+            ])
 
-        self.writer.add_scalar('test/loss', test_loss, self.args.iter_count)
-        self.writer.add_scalar('test/accuracy', 100. * correct / len(self.test_loader.dataset), self.args.iter_count)
-        print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(
-            test_loss, correct, len(self.test_loader.dataset),
-            100. * correct / len(self.test_loader.dataset)))
+            # Initialize the camera
+            camera = cv2.VideoCapture(0)
+            with torch.no_grad():
+                # counter = 0
+                while True:
+                    ret, frame = camera.read()
+                    # counter += 1
+                    if not ret:# or (counter > 100):
+                        break
+                    
+                    # Process the frame
+                    time_process = time.time()
+                    content_image = content_transform(frame)
+                    content_image = content_image.unsqueeze(0).to(self.device)
+                    output = self.model(content_image).cpu().detach()[0].clamp(0, 255).numpy().transpose(1,2,0).astype("uint8")
+                    time_process = time.time() - time_process
+                    
+                    # Render text
+                    outText = "Style Transfer time: {} sec, {} FPS".format(time_process, 1.0/time_process)
+                    print(outText)
+
+                    # Show results
+                    cv2.imshow('Frame', output)
+
+                    k = cv2.waitKey(1)
+                    if k==27:
+                        break
+            camera.release()
+            cv2.destroyAllWindows()
+
+        return
     
     def train(self):
-        print('Start Training')
         style_transform = transforms.Compose([
             transforms.ToTensor(),
             transforms.Lambda(lambda x: x.mul(255))
@@ -152,10 +225,9 @@ class Net(object):
 
         features_style = self.vgg(utils.normalize_batch(style))
         self.gram_style = [utils.gram_matrix(y) for y in features_style]
-        print('Done')
+        
         for epoch in range(1, self.args.epochs + 1):
             self._train_epoch(epoch)
-            self.test()
         # Save the model finally
         if self.args.save_model:
             self.save_model()
@@ -184,3 +256,17 @@ class Net(object):
         
         model_filename = self.args.checkpoint_dir + 'model-{}-{}.pth'.format(self.args.data_name, self.args.iter_count)
         self.model.load_state_dict(torch.load(model_filename))
+
+    def export_model_to_onnx(self):
+        self.model.eval()
+        with torch.no_grad():
+            # Create some sample input in the shape this model expects
+            dummy_input = torch.randn(1, 3, 480, 640).to(self.device)
+
+            # It's optional to label the input and output layers
+            input_names = [ "image" ]
+            output_names = [ "output" ]
+
+            # Use the exporter from torch to convert to onnx 
+            # model (that has the weights and net arch)
+            torch.onnx.export(self.model, dummy_input, "StyleTransfer_v1.onnx", verbose=True, input_names=input_names, output_names=output_names)
