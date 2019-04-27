@@ -48,4 +48,5 @@ class ModelLoader:
     
     def loadStyleNets(self, args):
         self.model = TransformerNet()
-        self.vgg = Vgg16(requires_grad=False)
+        if args.phase == 'train':
+            self.vgg = Vgg16(requires_grad=False)
