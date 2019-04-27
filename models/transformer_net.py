@@ -30,8 +30,8 @@
 # OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
+# Source: https://github.com/pytorch/examples/blob/master/fast_neural_style/neural_style/transformer_net.py
 import torch
-
 
 class TransformerNet(torch.nn.Module):
     def __init__(self):
