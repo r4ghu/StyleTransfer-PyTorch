@@ -45,6 +45,7 @@ from tensorboardX import SummaryWriter
 import cv2
 import time
 import utils
+from videocapture_async import VideoCaptureAsync
 
 class Net(object):
     def __init__(self, args):
@@ -167,10 +168,15 @@ class Net(object):
             
             if self.args.iter_count % self.args.save_frequency == 0:
                 self.save_model()
-    
 
-    def test(self, online=True):
+    # Start with serial execution
+    # Replace torch transform with numpy and opencv
+    def test(self, online=True, async=True):
         # TODO: Implement Offline mode
+        stream_pre = torch.cuda.Stream()
+        stream_pro = torch.cuda.Stream()
+        stream_post = torch.cuda.Stream()
+
         if online:
             # Model is already loaded
             # Keep it in eval model
@@ -183,21 +189,38 @@ class Net(object):
             ])
 
             # Initialize the camera
-            camera = cv2.VideoCapture(0)
+            if async:
+                camera = VideoCaptureAsync(0)
+                camera.start()
+            else:
+                camera = cv2.VideoCapture(0)
+
             with torch.no_grad():
-                # counter = 0
+                end = time.time()
                 while True:
-                    ret, frame = camera.read()
-                    # counter += 1
-                    if not ret:# or (counter > 100):
-                        break
-                    
-                    # Process the frame
-                    time_process = time.time()
-                    content_image = content_transform(frame)
-                    content_image = content_image.unsqueeze(0).to(self.device)
-                    output = self.model(content_image).cpu().detach()[0].clamp(0, 255).numpy().transpose(1,2,0).astype("uint8")
-                    time_process = time.time() - time_process
+                    with torch.cuda.stream(stream_pre):
+                        ret, frame = camera.read()
+                        if not ret:
+                            break
+                        
+                        # Process the frame
+                        frame = frame.swapaxes(1, 2).swapaxes(0, 1)
+                        frame = frame[np.newaxis, :, :, :]
+                        content_image = torch.from_numpy(frame)
+                        content_image = content_image.to(self.device)
+
+                    with torch.cuda.stream(stream_pro):
+                        torch.cuda.current_stream().wait_stream(stream_pre)
+                        content_image = content_image.type(torch.cuda.FloatTensor)
+                        output = self.model(content_image)
+                        output = output.clamp(0,255)
+                        output = output.cpu()
+
+                    with torch.cuda.stream(stream_post):
+                        torch.cuda.current_stream().wait_stream(stream_pro)
+                        output = output.numpy()[0].transpose(1,2,0).astype("uint8")
+
+                    time_process = time.time() - end
                     
                     # Render text
                     outText = "Style Transfer time: {} sec, {} FPS".format(time_process, 1.0/time_process)
@@ -209,7 +232,75 @@ class Net(object):
                     k = cv2.waitKey(1)
                     if k==27:
                         break
-            camera.release()
+                    end = time.time()
+
+                    # t = time.time()
+                    # frame = frame.swapaxes(1, 2).swapaxes(0, 1) # 0 ms
+                    # print('Swap axes =', time.time() - t)
+                    # t = time.time()
+                    # frame = frame[np.newaxis, :, :, :] # 0 ms
+                    # print('New axes =', time.time() - t)
+                    # # t = time.time()
+                    # # frame = frame.astype(np.float32)
+                    # # print('Float32 =', time.time() - t)
+                    # t = time.time()
+                    # content_image = torch.from_numpy(frame) # 0 ms
+                    # print('Torch array init =', time.time() - t)
+                    # t = time.time()
+                    # content_image = content_image.to(self.device) # < 1 ms
+                    # torch.cuda.synchronize()
+                    # print('Copy to GPU =', time.time() - t)
+                    # t = time.time()
+                    # content_image = content_image.type(torch.cuda.FloatTensor) # < 1 ms
+                    # torch.cuda.synchronize()
+                    # print('Convert to Float on GPU =', time.time() - t)
+                    # t = time.time()
+                    # output = self.model(content_image)
+                    # torch.cuda.synchronize()
+                    # print('Forward pass =', time.time()-t)
+                    # t = time.time()
+                    # output = output.clamp(0,255)
+                    # torch.cuda.synchronize()
+                    # print('Clamp on GPU =', time.time()-t)
+                    # # t = time.time()
+                    # # output = output.type(torch.cuda.ByteTensor)
+                    # # torch.cuda.synchronize()
+                    # # print('Float32 to UInt8 (GPU) =', time.time()-t)
+                    # t = time.time()
+                    # output = output.cpu()
+                    # torch.cuda.synchronize()
+                    # print('Copy to CPU =', time.time()-t)
+                    # t = time.time()
+                    # output = output.numpy()
+                    # torch.cuda.synchronize()
+                    # print('Numpy array conv =', time.time()-t)
+                    # t = time.time()
+                    # output = output[0]
+                    # print('Tensor to CHW =', time.time()-t)
+                    # t = time.time()
+                    # output = output.transpose(1,2,0)
+                    # print('CHW to HCW =', time.time()-t)
+                    # t = time.time()
+                    # output = output.astype("uint8")
+                    # print('Float32 to UInt8 =', time.time()-t)
+                    # time_process = time.time() - end
+                    
+                    # # Render text
+                    # outText = "Style Transfer time: {} sec, {} FPS\n\n\n".format(time_process, 1.0/time_process)
+                    # print(outText)
+
+                    # # Show results
+                    # cv2.imshow('Frame', output)
+
+                    # k = cv2.waitKey(1)
+                    # if k==27:
+                    #     break
+                    # end = time.time()
+                torch.cuda.synchronize()
+            if async:
+                camera.stop()
+            else:
+                camera.release()
             cv2.destroyAllWindows()
 
         return
