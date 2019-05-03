@@ -95,21 +95,3 @@ class DataLoader:
         self.train_loader = torch.utils.data.DataLoader(trainset,
                                                         batch_size=args.train_batch_size,
                                                         shuffle=True, **self.kwargs_gpu)
-    
-    # def loadStyles(self, args):
-    #     transform = transforms.Compose([
-    #         transforms.Resize(args.style_size),
-    #         transforms.CenterCrop(args.style_size),
-    #         transforms.ToTensor(),
-    #         transforms.Lambda(lambda x: x.mul(255))
-    #     ])
-
-    #     style_images = [f for f in os.listdir(args.styles_dir)]
-    #     style_num = len(style_images)
-        
-    #     style_batch = []
-
-    #     for i in range(self.style_num):
-    #         style = utils.load_image(args.styles_dir + style_images[i], size=args.style_size)
-    #         style = transform(style)
-    #         style_batch.append(style)
