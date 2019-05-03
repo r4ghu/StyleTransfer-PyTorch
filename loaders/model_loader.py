@@ -31,6 +31,15 @@
 # OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 from models import *
+custom_models = False
+try:
+    from models.private import *
+    custom_models = True
+except:
+    print('ModuleNotFoundError: No module named \'models.private\'')
+    print('Please contact the admin: `m.sriraghu@gmail.com` for more info.\n')
+    pass
+
 
 class ModelLoader:
     model = None
@@ -47,6 +56,19 @@ class ModelLoader:
         self.model = MNISTNet()
     
     def loadStyleNets(self, args):
-        self.model = TransformerNet()
+        if args.model_arch_ver == 'v1':
+            print('Yayy')
+            self.model = TransformerNet()
+        else:
+            if custom_models:
+                if args.model_arch_ver == 'v2':
+                    self.model = TransformerNet_v2()
+                elif args.model_arch_ver == 'v3':
+                    self.model = TransformerNet_v3()
+                else:
+                    self.model = TransformerNet()
+            else:
+                self.model = TransformerNet()
+        
         if args.phase == 'train':
             self.vgg = Vgg16(requires_grad=False)
