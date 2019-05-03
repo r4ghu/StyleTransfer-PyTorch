@@ -37,7 +37,7 @@ from net import Net
 parser = argparse.ArgumentParser(description='Arguments for training/testing StyleTransfer.')
 
 # Phase
-parser.add_argument('--phase', type=str, default='train',
+parser.add_argument('--phase', type=str, default='test',
                     help='Phase of the model: train/test')
 
 # Model Training Params
@@ -92,6 +92,9 @@ parser.add_argument("--image_size", type=int, default=256,
                     help="size of training images, default is 256 X 256")
 parser.add_argument("--style_size", type=int, default=None,
                     help="size of style_image, default is the original size of style image")
+
+parser.add_argument('--model_arch_ver', type=str, default='v3',
+                    help="Version of the DL model architecture.")
 
 
 def main(args):
