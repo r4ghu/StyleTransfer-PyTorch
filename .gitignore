@@ -107,4 +107,4 @@ venv.bak/
 data
 runs
 ckpt
-private.py
+private
