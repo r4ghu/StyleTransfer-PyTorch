@@ -93,7 +93,7 @@ parser.add_argument("--image_size", type=int, default=256,
 parser.add_argument("--style_size", type=int, default=None,
                     help="size of style_image, default is the original size of style image")
 
-parser.add_argument('--model_arch_ver', type=str, default='v3',
+parser.add_argument('--model_arch_ver', type=str, default='v1',
                     help="Version of the DL model architecture.")
 
 
