@@ -181,12 +181,6 @@ class Net(object):
             # Model is already loaded
             # Keep it in eval model
             self.model.eval()
-            
-            # Setup content transform
-            content_transform = transforms.Compose([
-                transforms.ToTensor(),
-                transforms.Lambda(lambda x: x.mul(255))
-            ])
 
             # Initialize the camera
             if async:
@@ -213,12 +207,12 @@ class Net(object):
                         torch.cuda.current_stream().wait_stream(stream_pre)
                         content_image = content_image.type(torch.cuda.FloatTensor)
                         output = self.model(content_image)
-                        output = output.clamp(0,255)
+                        output = output.clamp(0,255).type(torch.cuda.ByteTensor)
                         output = output.cpu()
 
                     with torch.cuda.stream(stream_post):
                         torch.cuda.current_stream().wait_stream(stream_pro)
-                        output = output.numpy()[0].transpose(1,2,0).astype("uint8")
+                        output = output.numpy()[0].transpose(1,2,0)
 
                     time_process = time.time() - end
                     
