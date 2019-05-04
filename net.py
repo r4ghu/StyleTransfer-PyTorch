@@ -228,68 +228,6 @@ class Net(object):
                         break
                     end = time.time()
 
-                    # t = time.time()
-                    # frame = frame.swapaxes(1, 2).swapaxes(0, 1) # 0 ms
-                    # print('Swap axes =', time.time() - t)
-                    # t = time.time()
-                    # frame = frame[np.newaxis, :, :, :] # 0 ms
-                    # print('New axes =', time.time() - t)
-                    # # t = time.time()
-                    # # frame = frame.astype(np.float32)
-                    # # print('Float32 =', time.time() - t)
-                    # t = time.time()
-                    # content_image = torch.from_numpy(frame) # 0 ms
-                    # print('Torch array init =', time.time() - t)
-                    # t = time.time()
-                    # content_image = content_image.to(self.device) # < 1 ms
-                    # torch.cuda.synchronize()
-                    # print('Copy to GPU =', time.time() - t)
-                    # t = time.time()
-                    # content_image = content_image.type(torch.cuda.FloatTensor) # < 1 ms
-                    # torch.cuda.synchronize()
-                    # print('Convert to Float on GPU =', time.time() - t)
-                    # t = time.time()
-                    # output = self.model(content_image)
-                    # torch.cuda.synchronize()
-                    # print('Forward pass =', time.time()-t)
-                    # t = time.time()
-                    # output = output.clamp(0,255)
-                    # torch.cuda.synchronize()
-                    # print('Clamp on GPU =', time.time()-t)
-                    # # t = time.time()
-                    # # output = output.type(torch.cuda.ByteTensor)
-                    # # torch.cuda.synchronize()
-                    # # print('Float32 to UInt8 (GPU) =', time.time()-t)
-                    # t = time.time()
-                    # output = output.cpu()
-                    # torch.cuda.synchronize()
-                    # print('Copy to CPU =', time.time()-t)
-                    # t = time.time()
-                    # output = output.numpy()
-                    # torch.cuda.synchronize()
-                    # print('Numpy array conv =', time.time()-t)
-                    # t = time.time()
-                    # output = output[0]
-                    # print('Tensor to CHW =', time.time()-t)
-                    # t = time.time()
-                    # output = output.transpose(1,2,0)
-                    # print('CHW to HCW =', time.time()-t)
-                    # t = time.time()
-                    # output = output.astype("uint8")
-                    # print('Float32 to UInt8 =', time.time()-t)
-                    # time_process = time.time() - end
-                    
-                    # # Render text
-                    # outText = "Style Transfer time: {} sec, {} FPS\n\n\n".format(time_process, 1.0/time_process)
-                    # print(outText)
-
-                    # # Show results
-                    # cv2.imshow('Frame', output)
-
-                    # k = cv2.waitKey(1)
-                    # if k==27:
-                    #     break
-                    # end = time.time()
                 torch.cuda.synchronize()
             if async:
                 camera.stop()
