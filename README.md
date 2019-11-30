@@ -15,7 +15,7 @@ The app fetches image from your webcam and perform style transfer @ (average) 21
 
 ## Tutorial
 
-If you are interested in learning more about this project, a **step-by-step tutorial** is available at - [**Link**](https://sriraghu.com/2019/05/04/style-transfer-pytorch/) 
+If you are interested in learning more about this project, a **step-by-step tutorial** is available at - [**Link**](https://sriraghu.com/deeplearning/faster-style-transfer/) 
 
 ## Results
 
